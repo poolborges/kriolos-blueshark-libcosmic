@@ -35,6 +35,8 @@ pub enum Message {
     SendMessage,
     AiResponseReceived(String),
     SelectChat(usize),
+    ChatOptionsOpen(usize),
+    ChatOptionsDelete(usize),      // Exemplo de ação futura
     NewChat,
     ModelSelected(usize),
     OpenModelManager,
@@ -82,7 +84,8 @@ impl BlueShark {
         let mut chat_list = column()
             .spacing(8)
             .padding(10)
-            .width(Length::Fixed(240.0)); // Largura padrão para sidebars de chat
+            .width(Length::Fixed(240.0))
+            .align_x(Alignment::Start); // Largura padrão para sidebars de chat
 
         // Botão de Novo Chat com Emoji
         chat_list = chat_list.push(
@@ -92,34 +95,64 @@ impl BlueShark {
         );
         
         // Lista de conversas existentes
-        let mut scrollable_list = column().spacing(5);
+        let mut scrollable_list = column()
+            .spacing(5)
+            .width(Length::Fill)
+            .align_x(Alignment::Start); // Alinhamento à esquerda para os itens da lista
+
         for (i, chat) in self.chats.iter().enumerate() {
             let is_selected = i == self.current_chat_idx;
-            
-            // Se estiver selecionado, usamos um estilo diferente (ex: 'Primary' ou 'Selected')
-            let mut btn = if is_selected {
-                widget::button::suggested(&chat.title)
+
+            // 1. Truncagem do título
+            let display_title = if chat.title.chars().count() > 18 {
+                format!("{}...", chat.title.chars().take(15).collect::<String>())
             } else {
-                widget::button::standard(&chat.title)
+                chat.title.clone()
             };
-            
-            btn = btn.width(Length::Fill).on_press(Message::SelectChat(i));
-            scrollable_list = scrollable_list.push(btn);
+
+            // 2. Botão Principal (Ocupa o espaço disponível)
+            let main_btn = if is_selected {
+                widget::button::suggested(display_title)
+            } else {
+                widget::button::standard(display_title)
+            }
+            .width(Length::Fill) // Faz este botão "esticar"
+            .on_press(Message::SelectChat(i));
+
+            // 3. Botão de Opções (3 pontos)
+            let options_btn = widget::button::standard("⋮")
+                .on_press(Message::ChatOptionsOpen(i))
+                .padding(5); // Mensagem para abrir menu
+
+            // 4. Juntar ambos numa Row
+            let item_row = row()
+                .push(main_btn)
+                .push(options_btn)
+                .spacing(4)
+                .align_y(Alignment::Center)
+                .width(Length::Fill);
+
+            scrollable_list = scrollable_list.push(item_row);
         }
 
+
         // Envolver a lista num scrollable para quando houver muitos chats
-        let chat_history = scrollable(scrollable_list).height(Length::Fill);
+        let chat_history = scrollable(scrollable_list)
+            .height(Length::Fill)
+            .width(Length::Fill);
+
         chat_list = chat_list.push(chat_history);
 
         // O Container define o "look" da sidebar (fundo ligeiramente diferente)
         container(chat_list)
             .height(Length::Fill)
+            .width(Length::Fixed(240.0)) // Reforça a largura no container final
             .class(cosmic::theme::Container::Card) // Dá o aspeto de painel lateral
             .into()
     }
 
 
-    fn render_chat_area(&self) -> Element<'_, Message> {
+    fn render_chat_area1(&self) -> Element<'_, Message> {
         // --- HISTÓRICO DE CHAT ---
         let mut chat_column = column().spacing(12).width(Length::Fill);
         let current_chat = &self.chats[self.current_chat_idx];
@@ -216,6 +249,78 @@ impl BlueShark {
             .into()
     }
 
+    fn render_chat_area(&self) -> Element<'_, Message> {
+        let current_chat = &self.chats[self.current_chat_idx];
+        
+        // 1. Histórico de Mensagens
+        let mut chat_column = column().spacing(12).width(Length::Fill);
+        
+        for m in &current_chat.messages {
+            let is_user = m.starts_with("Tu:");
+            let display_text = m.replace("Tu: ", "").replace("Blue Shark: ", "");
+
+            let bubble = container(text(display_text))
+                .padding(12)
+                .max_width(500.0) // Limita a largura da bolha de chat
+                .class(if is_user {
+                    cosmic::theme::Container::Secondary // Cor neutra para o utilizador
+                } else {
+                    cosmic::theme::Container::Primary   // Cor de destaque para a IA
+                });
+
+            let mut row_wrapper = row().spacing(0).width(Length::Fill);
+
+            if is_user {
+                // Se for o utilizador, empurramos a bolha para a direita com um espaço flexível
+                row_wrapper = row_wrapper
+                    .push(Space::new().width(Length::Fill))
+                    .push(bubble);
+            } else {
+                // Se for a IA, a bolha fica à esquerda e o espaço fica à direita
+                row_wrapper = row_wrapper
+                    .push(bubble)
+                    .push(Space::new().width(Length::Fill));
+            }
+
+            let row_wrapper = row_wrapper.align_y(Alignment::Center);
+
+            chat_column = chat_column.push(row_wrapper);
+        }
+
+        let chat_history = scrollable(chat_column)
+            .height(Length::Fill)
+            .width(Length::Fill);
+
+        // 2. Barra de Input (com os teus botões de emoji)
+        let input_box = text_input("Pergunta algo ao Blue Shark...", &self.input_value)
+            .on_input(Message::InputChanged)
+            .on_submit(|_| Message::SendMessage)
+            .width(Length::Fill)
+            .padding(10);
+
+        let send_btn = widget::button::standard("🚀")
+            .on_press(Message::SendMessage);
+
+        let bottom_bar = row()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(input_box)
+            .push(send_btn);
+
+        // Layout Final da Área de Chat
+        container(
+            column()
+                .spacing(15)
+                .push(chat_history)
+                .push(bottom_bar)
+        )
+        .padding(20)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+
+
 }
 
 impl Application for BlueShark {
@@ -297,7 +402,14 @@ impl Application for BlueShark {
                 }
                 Task::none()
             }
-            Message::ToggleSidebar => {
+            Message::ChatOptionsOpen(idx) => {
+                if let Some(chat) = self.chats.get(idx) {
+                    println!("Opções para o chat: {}", chat.title);
+                    // Aqui poderias abrir um Menu ou mudar um estado de edição
+                }
+                Task::none()
+            }
+                        Message::ToggleSidebar => {
                 self.sidebar_visible = !self.sidebar_visible;
                 Task::none()
             }
