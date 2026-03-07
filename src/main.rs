@@ -7,6 +7,7 @@ struct BlueShark {
     core: Core,
     input_value: String,
     messages: Vec<String>,
+    is_loading: bool, 
 }
 
 #[derive(Debug, Clone)]
@@ -26,27 +27,27 @@ impl Application for BlueShark {
     fn core_mut(&mut self) -> &mut Core { &mut self.core }
 
     fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
-        (
-            Self {
-                core,
-                input_value: String::new(),
-                messages: vec!["🦈 Olá! Sou o Blue Shark. Como posso ajudar Cabo Verde hoje?".into()],
-            },
-            Task::none(),
-        )
-    }
+    let app = Self {
+        core,
+        input_value: String::new(),
+        messages: vec!["🦈 Olá! Sou o Blue Shark. Como posso ajudar?".into()],
+        is_loading: false, // Inicializa como falso
+    };
+    (app, Task::none())
+}
 
-    fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
+        fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::InputChanged(val) => {
-                self.input_value = val;
+                if !self.is_loading { self.input_value = val; }
                 Task::none()
             }
             Message::SendMessage => {
-                if !self.input_value.is_empty() {
+                if !self.input_value.is_empty() && !self.is_loading {
                     let user_text = self.input_value.clone();
                     self.messages.push(format!("Tu: {}", user_text));
                     self.input_value.clear();
+                    self.is_loading = true; // Bloqueia a interface
 
                     // Conexão real com Ollama
                     return Task::perform(
@@ -78,10 +79,12 @@ impl Application for BlueShark {
             }
             Message::AiResponseReceived(response) => {
                 self.messages.push(response);
+                self.is_loading = false; // Desbloqueia a interface
                 Task::none()
             }
         }
     }
+
 
     fn view(&self) -> Element<'_, Self::Message> {
         let header = widget::header_bar()
@@ -105,21 +108,38 @@ impl Application for BlueShark {
 
         let chat_history = scrollable(chat_column).height(Length::Fill);
 
+        // Criamos o botão de forma condicional
+        let mut send_button = widget::button::suggested("Enviar");
+        
+        if !self.is_loading && !self.input_value.is_empty() {
+            send_button = send_button.on_press(Message::SendMessage);
+        }
+
         let input_box = row()
             .spacing(12)
             .align_y(Alignment::Center)
             .push(
-                text_input("Pergunta ao Blue Shark...", &self.input_value)
-                    .on_input(Message::InputChanged)
-                    .on_submit(|_| Message::SendMessage)
-                    .width(Length::Fill)
+                text_input(
+                    if self.is_loading { "O Blue Shark está a pensar..." } else { "Pergunta algo..." }, 
+                    &self.input_value
+                )
+                .on_input(Message::InputChanged)
+                .on_submit(|_| Message::SendMessage)
+                .width(Length::Fill)
             )
-            .push(widget::button::suggested("Enviar").on_press(Message::SendMessage));
+            .push(send_button);
+
+        // Se estiver a carregar, podemos adicionar uma barra de progresso indeterminada
+        let mut content = column().spacing(20).push(chat_history).push(input_box);
+        
+        if self.is_loading {
+            content = content.push(widget::progress_bar(0.0..=100.0, 50.0)); // Barra estática ou animada
+        }
 
         column()
             .push(header)
             .push(
-                container(column().spacing(20).push(chat_history).push(input_box))
+                container(content)
                     .padding(20)
                     .width(Length::Fill)
                     .height(Length::Fill)
