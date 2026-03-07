@@ -1,7 +1,7 @@
 use cosmic::app::{Core, Task, Settings};
 use cosmic::iced::{Alignment, Length};
 use cosmic::widget::{self, column, row, scrollable, text, text_input, container, Space};
-use cosmic::{Application, Element, Action}; // Importa Action
+use cosmic::{Application, Element, Action};
 
 struct BlueShark {
     core: Core,
@@ -26,12 +26,14 @@ impl Application for BlueShark {
     fn core_mut(&mut self) -> &mut Core { &mut self.core }
 
     fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
-        let app = Self {
-            core,
-            input_value: String::new(),
-            messages: vec!["🦈 Olá! Eu sou o Blue Shark. Como posso ajudar?".to_string()],
-        };
-        (app, Task::none())
+        (
+            Self {
+                core,
+                input_value: String::new(),
+                messages: vec!["🦈 Olá! Sou o Blue Shark. Como posso ajudar Cabo Verde hoje?".into()],
+            },
+            Task::none(),
+        )
     }
 
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
@@ -46,11 +48,27 @@ impl Application for BlueShark {
                     self.messages.push(format!("Tu: {}", user_text));
                     self.input_value.clear();
 
-                    // CORREÇÃO: Task::perform espera Action::from(Message)
+                    // Conexão real com Ollama
                     return Task::perform(
                         async move {
-                            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-                            format!("Blue Shark: Analisei a tua mensagem sobre '{}'.", user_text)
+                            let client = reqwest::Client::new();
+                            let res = client.post("http://localhost:11434/api/generate")
+                                .json(&serde_json::json!({
+                                    "model": "granite-code:3b",//"llama3", 
+                                    "prompt": user_text,
+                                    "stream": false
+                                }))
+                                .send()
+                                .await;
+
+                            match res {
+                                Ok(response) => {
+                                    let json: serde_json::Value = response.json().await.unwrap_or_default();
+                                    let ai_text = json["response"].as_str().unwrap_or("Sem resposta").to_string();
+                                    format!("Blue Shark: {}", ai_text)
+                                }
+                                Err(_) => "Blue Shark: Erro! O Ollama está ativo?".into(),
+                            }
                         },
 
                         |res| Action::from(Message::AiResponseReceived(res)),
@@ -75,22 +93,13 @@ impl Application for BlueShark {
         
         for m in &self.messages {
             let is_user = m.starts_with("Tu:");
-            
-            // Usamos apenas o container com padding. 
-            // O COSMIC aplicará o estilo de fundo padrão automaticamente.
-            let bubble = container(text(m))
-                .padding(12);
+            let bubble = container(text(m)).padding(12);
 
             let row_wrapper = if is_user {
-                row()
-                    .push(Space::new().width(Length::Fill))
-                    .push(bubble)
+                row().push(Space::new().width(Length::Fill)).push(bubble)
             } else {
-                row()
-                    .push(bubble)
-                    .push(Space::new().width(Length::Fill))
+                row().push(bubble).push(Space::new().width(Length::Fill))
             };
-
             chat_column = chat_column.push(row_wrapper);
         }
 
@@ -100,7 +109,7 @@ impl Application for BlueShark {
             .spacing(12)
             .align_y(Alignment::Center)
             .push(
-                text_input("Escreve aqui...", &self.input_value)
+                text_input("Pergunta ao Blue Shark...", &self.input_value)
                     .on_input(Message::InputChanged)
                     .on_submit(|_| Message::SendMessage)
                     .width(Length::Fill)
@@ -120,6 +129,5 @@ impl Application for BlueShark {
 }
 
 fn main() -> cosmic::iced::Result {
-    let settings = Settings::default();
-    cosmic::app::run::<BlueShark>(settings, ())
+    cosmic::app::run::<BlueShark>(Settings::default(), ())
 }
