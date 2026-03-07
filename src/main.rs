@@ -261,7 +261,7 @@ impl BlueShark {
 
             let bubble = container(text(display_text))
                 .padding(12)
-                .max_width(500.0) // Limita a largura da bolha de chat
+                //.max_width(500.0) // Limita a largura da bolha de chat
                 .class(if is_user {
                     cosmic::theme::Container::Secondary // Cor neutra para o utilizador
                 } else {
@@ -278,8 +278,8 @@ impl BlueShark {
             } else {
                 // Se for a IA, a bolha fica à esquerda e o espaço fica à direita
                 row_wrapper = row_wrapper
-                    .push(bubble)
-                    .push(Space::new().width(Length::Fill));
+                    .push(bubble.width(Length::Fill)).width(Length::Fill);
+                    //.push(Space::new().width(Length::Fill));
             }
 
             let row_wrapper = row_wrapper.align_y(Alignment::Center);
