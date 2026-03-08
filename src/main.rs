@@ -435,7 +435,7 @@ impl Application for BlueShark {
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         // Criamos o botão com o emoji correspondente ao estado
         let sidebar_toggle = widget::button::standard(
-            if self.sidebar_visible { "◀" } else { "☰" }
+            if self.sidebar_visible { "☰" } else { "☰" }
         )
         .on_press(Message::ToggleSidebar)
         .padding(5); // Ajuste opcional para alinhar com o menu
