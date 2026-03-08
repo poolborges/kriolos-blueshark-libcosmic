@@ -78,8 +78,7 @@ jobs:
       - name: Install cross-compilation tool
         if: matrix.platform.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
-
-
+      
       - name: Setup dependencies for Linux native builds
         if: ${{ !matrix.platform.use_cross && matrix.platform.os == 'ubuntu-latest' }}
         run: |
@@ -91,12 +90,6 @@ jobs:
             libwayland-dev \
             libfontconfig1-dev \
             libasound2-dev # Caso use áudio futuramente  
-      
-      - name: Setup OpenSSL for native builds
-        if: ${{ !matrix.platform.use_cross && matrix.platform.os == 'ubuntu-latest' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -118,7 +111,7 @@ jobs:
 
       - name: Build with cross
         if: matrix.platform.use_cross
-        run: cross build --release --target ${{ matrix.platform.target }}
+        run: cross build --release --target ${{ matrix.platform.target }} --features vendored-openssl
 
       - name: Build natively
         if: ${{ !matrix.platform.use_cross }}
