@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use cosmic::app::{Core, Task, Settings};
-use cosmic::iced::{Alignment, Length};
+use cosmic::iced::{Alignment, Color, Length};
+use cosmic::iced::font::{self, Weight};
 use cosmic::widget::{self, Space, column, container, icon, menu, row, scrollable, text, text_input};
-use cosmic::{Application, Element, Action};
+use cosmic::{Action, Application, Element, theme};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MenuAction {
@@ -61,7 +62,7 @@ impl BlueShark {
         //key_binds.insert(menu::KeyBind::new("About", "Ctrl+A"), MenuAction::About);
 
         let initial_chat = Chat {
-            title: "Chat Inicial".into(),
+            title: "Chat Inicial12345678901234567890".into(),
             messages: vec!["🦈 Olá! Sou o Blue Shark. Como posso ajudar?".into()],
         };
 
@@ -84,8 +85,8 @@ impl BlueShark {
         let mut chat_list = column()
             .spacing(8)
             .padding(10)
-            .width(Length::Fixed(240.0))
-            .align_x(Alignment::Start); // Largura padrão para sidebars de chat
+            .width(Length::Fixed(240.0));
+            //.align_x(Alignment::Start); // Largura padrão para sidebars de chat
 
         // Botão de Novo Chat com Emoji
         chat_list = chat_list.push(
@@ -98,7 +99,7 @@ impl BlueShark {
         let mut scrollable_list = column()
             .spacing(5)
             .width(Length::Fill)
-            .align_x(Alignment::Start); // Alinhamento à esquerda para os itens da lista
+            .align_x(Alignment::End); // Alinhamento à esquerda para os itens da lista
 
         for (i, chat) in self.chats.iter().enumerate() {
             let is_selected = i == self.current_chat_idx;
@@ -126,7 +127,7 @@ impl BlueShark {
 
             // 4. Juntar ambos numa Row
             let item_row = row()
-                .push(main_btn)
+                .push(main_btn.width(Length::Fill))
                 .push(options_btn)
                 .spacing(4)
                 .align_y(Alignment::Center)
@@ -134,7 +135,6 @@ impl BlueShark {
 
             scrollable_list = scrollable_list.push(item_row);
         }
-
 
         // Envolver a lista num scrollable para quando houver muitos chats
         let chat_history = scrollable(scrollable_list)
@@ -251,7 +251,23 @@ impl BlueShark {
 
     fn render_chat_area(&self) -> Element<'_, Message> {
         let current_chat = &self.chats[self.current_chat_idx];
-        
+
+        if current_chat.messages.is_empty() {
+            container(
+                column()
+                    .spacing(20)
+                    .align_x(Alignment::Center)
+                    .push(text("🦈").size(80)) // Logo Grande
+                    .push(text("Blue Shark AI").size(30)) // Nome da Marca
+                    .push(text("From Cabo Verde to the World").size(16))
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center)
+            .into()
+        } else {
+            
         // 1. Histórico de Mensagens
         let mut chat_column = column().spacing(12).width(Length::Fill);
         
@@ -318,6 +334,7 @@ impl BlueShark {
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
+    }
     }
 
 
@@ -434,14 +451,31 @@ impl Application for BlueShark {
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         // Criamos o botão com o emoji correspondente ao estado
-        let sidebar_toggle = widget::button::standard(
+        let sidebar_btn = widget::button::standard(
             if self.sidebar_visible { "☰" } else { "☰" }
         )
         .on_press(Message::ToggleSidebar)
         .padding(5); // Ajuste opcional para alinhar com o menu
 
+        let logo_shark = text("🦈").size(22); 
+        let brand_name = text("Blue Shark")
+            .size(16).width(Length::Shrink)
+            .class(cosmic::theme::Text::Accent);
+        // Opcional: Um pequeno texto ou emoji que represente Cabo Verde (🇨🇻) ao lado do menu
+        let brand = text("🇨🇻").size(14);
+
         // Podes retornar o botão sozinho ou junto com um Menu Bar
-        vec![sidebar_toggle.into()]
+        //vec![sidebar_btn.into()]
+        vec![
+            row()
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .push(sidebar_btn)
+                .push(logo_shark)
+                .push(brand_name)
+                .push(brand)
+                .into()
+        ]
     }
 
 }
