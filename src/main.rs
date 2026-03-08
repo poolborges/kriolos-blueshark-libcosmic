@@ -15,6 +15,7 @@ pub enum MenuAction {
 struct Chat {
     title: String,
     messages: Vec<String>,
+    started: bool, // Para controlar se a mensagem inicial já foi enviada ou não
 }
 
 struct BlueShark {
@@ -40,6 +41,7 @@ pub enum Message {
     ChatOptionsDelete(usize),      // Exemplo de ação futura
     NewChat,
     ModelSelected(usize),
+    ChatStarted(usize), // Para controlar o envio da mensagem inicial
     OpenModelManager,
     AttachFile,
     MicrophoneAction,
@@ -56,14 +58,40 @@ impl menu::Action for MenuAction {
     }
 }
 
+async fn llm_request(model: String, prompt: String) -> String {
+    let client = reqwest::Client::new();
+    
+    // Configuração para o Ollama local
+    let res = client.post("http://localhost:11434/api/generate")
+        .json(&serde_json::json!({
+            "model": model,
+            "prompt": prompt,
+            "stream": false // Definido como false para receber a resposta completa de uma vez
+        }))
+        .send()
+        .await;
+
+    match res {
+        Ok(resp) => {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                json["response"].as_str().unwrap_or("🦈 Erro: Resposta vazia.").to_string()
+            } else {
+                "🦈 Erro: Falha ao processar resposta do Ollama.".to_string()
+            }
+        }
+        Err(_) => "🦈 Erro: O Ollama está desligado? Verifica o serviço local.".into(),
+    }
+}
+
 impl BlueShark {
     fn new(core: Core) -> Self {
         let mut key_binds = HashMap::new();
         //key_binds.insert(menu::KeyBind::new("About", "Ctrl+A"), MenuAction::About);
 
         let initial_chat = Chat {
-            title: "Chat Inicial12345678901234567890".into(),
-            messages: vec!["🦈 Olá! Sou o Blue Shark. Como posso ajudar?".into()],
+            title: "Chat Inicial".into(),
+            messages: vec![],
+            started: false,
         };
 
         Self {
@@ -77,6 +105,29 @@ impl BlueShark {
             available_models: vec!["granite-code:3b".into(), "granite-code:8b".into()],
             sidebar_visible: true,
             key_binds,
+        }
+    }
+
+    
+    fn llm_request_2(&self, prompt: String, model: String) -> impl std::future::Future<Output = String> {
+        async move {
+            let client = reqwest::Client::new();
+            let res = client.post("http://localhost:11434/api/generate")
+                .json(&serde_json::json!({
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": false
+                }))
+                .send().await;
+
+            match res {
+                Ok(resp) => {
+                    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+                    let txt = json["response"].as_str().unwrap_or("Sem resposta").to_string();
+                    format!("AI {}", txt)
+                }
+                Err(_) => "Erro: Ollama offline?. execute 'ollama serve'".into(),
+            }
         }
     }
 
@@ -158,12 +209,10 @@ impl BlueShark {
         let current_chat = &self.chats[self.current_chat_idx];
         
         for m in &current_chat.messages {
-            let is_user = m.starts_with("Tu:");
-
-            let display_text = if is_user { 
-                m.trim_start_matches("Tu: ").to_string() 
-            } else { 
-                m.trim_start_matches("Blue Shark: ").to_string() 
+            let (is_user, display_text) = if m.starts_with("USER:") {
+                (true, m.replace("USER:", ""))
+            } else {
+                (false, m.replace("AI:", ""))
             };
             
             // CORREÇÃO: Estilo das bolhas de chat
@@ -252,14 +301,16 @@ impl BlueShark {
     fn render_chat_area(&self) -> Element<'_, Message> {
         let current_chat = &self.chats[self.current_chat_idx];
 
-        if current_chat.messages.is_empty() {
+        if current_chat.started == false {
             container(
                 column()
                     .spacing(20)
                     .align_x(Alignment::Center)
-                    .push(text("🦈").size(80)) // Logo Grande
-                    .push(text("Blue Shark AI").size(30)) // Nome da Marca
-                    .push(text("From Cabo Verde to the World").size(16))
+                    .push(text("🦈").size(100)) // Logo Grande
+                    .push(text("Blue Shark AI").size(32)) // Nome da Marca
+                    .push(text("From Cabo Verde 🇨🇻 to the World").size(16))
+                    .push(Space::new().height(Length::Fixed(50.0)))
+                .push(widget::button::suggested("Começar Nova Conversa").on_press(Message::ChatStarted(self.current_chat_idx)))
             )
             .width(Length::Fill)
             .height(Length::Fill)
@@ -272,8 +323,11 @@ impl BlueShark {
         let mut chat_column = column().spacing(12).width(Length::Fill);
         
         for m in &current_chat.messages {
-            let is_user = m.starts_with("Tu:");
-            let display_text = m.replace("Tu: ", "").replace("Blue Shark: ", "");
+            let (is_user, display_text) = if m.starts_with("USER:") {
+                (true, m.replace("USER:", ""))
+            } else {
+                (false, m.replace("AI:", ""))
+            };
 
             let bubble = container(text(display_text))
                 .padding(12)
@@ -363,43 +417,35 @@ impl Application for BlueShark {
             }
             Message::SendMessage => {
                 if !self.input_value.is_empty() && !self.is_loading {
-                    let user_text = self.input_value.clone();
-                    self.chats[self.current_chat_idx].messages.push(format!("Tu: {}", user_text));
-                    self.input_value.clear();
-                    self.is_loading = true;
+                    let user_text = self.input_value.trim().to_string();
+                    self.chats[self.current_chat_idx].messages.push(format!("USER:{}", user_text));
+                    
+                    self.input_value.clear(); // Limpa o campo imediatamente
+                    self.is_loading = true;   // Ativa o spinner ou texto de "A pensar..."
 
                     let model = self.selected_model.clone();
                     return Task::perform(
-                        async move {
-                            let client = reqwest::Client::new();
-                            let res = client.post("http://localhost:11434/api/generate")
-                                .json(&serde_json::json!({
-                                    "model": model,
-                                    "prompt": user_text,
-                                    "stream": false
-                                }))
-                                .send().await;
+                        llm_request(model, user_text), // Função auxiliar para limpar o update
 
-                            match res {
-                                Ok(resp) => {
-                                    let json: serde_json::Value = resp.json().await.unwrap_or_default();
-                                    let txt = json["response"].as_str().unwrap_or("Sem resposta").to_string();
-                                    format!("Blue Shark: {}", txt)
-                                }
-                                Err(_) => "Erro: Ollama offline?. execute 'ollama serve'".into(),
-                            }
-                        },
-
+                        //|res| Message::AiResponseReceived(res).into(),
                         |res| Action::from(Message::AiResponseReceived(res)),
                     );
                 }
                 Task::none()
             }
             Message::AiResponseReceived(resp) => {
-                self.chats[self.current_chat_idx].messages.push(resp);
+                self.chats[self.current_chat_idx].messages.push(format!("AI:{}", resp));
                 self.is_loading = false;
                 Task::none()
             }
+
+            Message::ChatStarted(idx) => {
+                self.current_chat_idx = idx;
+                self.chats[self.current_chat_idx].messages.push("🦈🦈 Olá! Sou o Blue Shark. Como posso ajudar?".into());
+                self.chats[self.current_chat_idx].started = true;
+                Task::none()
+            }
+
             Message::SelectChat(idx) => {
                 self.current_chat_idx = idx;
                 Task::none()
@@ -408,7 +454,8 @@ impl Application for BlueShark {
                 let new_idx = self.chats.len();
                 self.chats.push(Chat {
                     title: format!("Chat {}", new_idx + 1),
-                    messages: vec!["🦈 Novo chat iniciado. Como posso ajudar?".into()],
+                    messages: vec![],
+                    started: false,
                 });
                 self.current_chat_idx = new_idx;
                 Task::none()

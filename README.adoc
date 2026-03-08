@@ -1,0 +1,44 @@
+= BlueShark AI - LLM Local para Windows
+:toc: left
+:icons: font
+:sectnums:
+
+
+== Build and Packaging
+
+Dica: No Linux, coloca o teu ícone em /usr/share/icons/hicolor/scalable/apps/com.github.kriolos.BlueShark.svg.
+
+== Modelos Disponíveis
+
+
+
+----
+ollama pull llama3
+----
+
+
+----
+Dicas para escolher o modelo:
+llama3 (8B): É o padrão atual, muito inteligente e equilibrado. (Requer ~4.7GB)
+phi3: Se o teu PC for mais modesto (pouca RAM/GPU), este é minúsculo e muito rápido.
+Comando: ollama pull phi3
+mistral: Outra excelente alternativa polivalente.
+----
+
+
+== Configuração do Modelo
+
+
+----
+// Se fizeste 'ollama pull llama3', usa:
+"model": "llama3", 
+
+// Se o teu PC for mais lento e preferires o 'phi3', usa:
+"model": "phi3", 
+
+
+ollama run llama3 "Olá, quem és tu?"
+
+ollama run granite-code:3b "Explica-me o que é uma Struct."
+ollama run granite-code:8b "Explica-me o que é uma Struct."
+----

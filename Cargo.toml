@@ -3,7 +3,7 @@ name = "kriolos-cosmic"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
-description = "An application for the COSMIC™ desktop"
+description = "BlueShark AI - An application from Cabo Verde to the World"
 repository = "https://github.com/kriolos/kriolos-cosmic"
 
 [dependencies]

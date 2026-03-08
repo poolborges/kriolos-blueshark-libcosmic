@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Blue Shark AI
+Comment=AI Assistant from Cabo Verde
+Exec=blue-shark
+Icon=com.github.kriolos.BlueShark
+Terminal=false
+Type=Application
+Categories=Utility;Development;
